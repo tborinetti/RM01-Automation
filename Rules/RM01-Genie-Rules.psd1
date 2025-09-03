@@ -4,5 +4,4 @@
         RetentionDays = 7
         Depth = 1
     };
-
 }
