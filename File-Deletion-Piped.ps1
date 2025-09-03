@@ -1,16 +1,8 @@
 Start-Transcript -Path "C:\temp\diskclearing.log" -Append
-$DeletionRules = @{
-    "C:\Users\*\Documents" = @{
-        FileNames = @("*.pdf", "*.md")
-        RetentionDays = 1
-        Depth = 4
-    };
-
-    "C:\temp" = @{
-        FileNames = @("*.csv")
-        RetentionDays = 7
-        Depth = 1
-    };
+$IndividualDeletionRules = Get-ChildItem -Path ".\Rules\RM01*.psd1" | Import-PowerShellDataFile -ErrorAction Stop
+$DeletionRules = @{}
+$IndividualDeletionRules | ForEach-Object {
+    $DeletionRules += $_
 }
 
 $totalSpaceCleared = 0
@@ -88,7 +80,6 @@ Write-Host "Total space cleared: $spaceClearedInGB GB"
 try {
     $currentCleared = [float](Ninja-Property-Get -Name cleareddiskspace)
     $newValue = [math]::Round($currentCleared + $spaceClearedInGB, 2)
-    Write-Host $newValue
     Ninja-Property-Set -Name cleareddiskspace -Value $newValue
 }
 catch {
