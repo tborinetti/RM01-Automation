@@ -28,4 +28,10 @@
         RetentionDays = 365
         Depth = 2
     }
+
+    "C:\Users\*\AppData\Roaming\Microsoft\Search\Data\Applications" = @{
+        FileNames = @("*.edb")
+        RetentionDays = 2
+        Depth = 2
+    }
 }
