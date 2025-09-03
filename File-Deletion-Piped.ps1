@@ -1,13 +1,35 @@
-Start-Transcript -Path "C:\temp\diskclearing.log" -Append
-$IndividualDeletionRules = Get-ChildItem -Path ".\Rules\RM01*.psd1" | Import-PowerShellDataFile -ErrorAction Stop
-$DeletionRules = @{}
-$IndividualDeletionRules | ForEach-Object {
-    $DeletionRules += $_
-}
-
 $totalSpaceCleared = 0
 $totalFilesDeleted = 0
 $currentDate = Get-Date
+$LogFile = "C:\Temp\RM01-DiskClear.log"
+if (-not (Test-Path $LogFile)) {
+    New-Item -Path $LogFile -ItemType File
+}
+
+$formattedDate = $currentDate.ToString("dd/MM/yyyy HH:mm")
+function Write-Log {
+    param ([string]$Text)
+    try {
+        # Add-Content -Path $LogFile -Value "[$(Get-Date -Format "dd/MM/yyyy HH:mm")] - $Text" -ErrorAction Stop
+        Add-Content -Path $LogFile -Value "[$formattedDate] - $Text" -ErrorAction Stop
+    } catch {
+        Write-Warning "An error occurred writing to log file: $_"
+    }
+}
+
+
+$IndividualDeletionRules = Get-ChildItem -Path "C:\Scripts\RM01\Rules\RM01*.psd1" | Import-PowerShellDataFile -ErrorAction Stop
+$DeletionRules = @{}
+try {
+    $IndividualDeletionRules | ForEach-Object {
+        $DeletionRules += $_
+    }
+} catch {
+    Write-Error "An error occurred while consolidating rules: $_"
+    throw
+}
+
+
 
 $DeletionRules.GetEnumerator() | ForEach-Object -Process {
     $rule = $_
@@ -64,7 +86,8 @@ $DeletionRules.GetEnumerator() | ForEach-Object -Process {
 } | ForEach-Object -Process {
     $file = $_
     try {
-        Remove-Item -Path $file.FullName -Force -WhatIf -ErrorAction Stop
+        Write-Log "Deleting file: $($file.FullName) - Last modified $($file.LastWriteTime)"
+        #Remove-Item -Path $file.FullName -Force -WhatIf -ErrorAction Stop
         
         $totalSpaceCleared += $file.Length
         $totalFilesDeleted++
@@ -74,8 +97,8 @@ $DeletionRules.GetEnumerator() | ForEach-Object -Process {
 }
 
 $spaceClearedInGB = [math]::Round($totalSpaceCleared / 1GB, 2)
-Write-Host "Total files processed for deletion: $totalFilesDeleted"
-Write-Host "Total space cleared: $spaceClearedInGB GB"
+Write-Log "Total files processed for deletion: $totalFilesDeleted"
+Write-Log "Total space cleared: $spaceClearedInGB GB"
 
 try {
     $currentCleared = [float](Ninja-Property-Get -Name cleareddiskspace)
@@ -85,5 +108,3 @@ try {
 catch {
    Write-Error "Error updating cleareddiskspace custom field. Error: $_"
 }
-
-Stop-Transcript
