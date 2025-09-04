@@ -1,24 +1,27 @@
 $totalSpaceCleared = 0
 $totalFilesDeleted = 0
 $currentDate = Get-Date
+$formattedDate = $currentDate.ToString("dd/MM/yyyy HH:mm")
+
+
 $LogFile = "C:\Temp\RM01-DiskClear.log"
 if (-not (Test-Path $LogFile)) {
     New-Item -Path $LogFile -ItemType File
 }
 
-$formattedDate = $currentDate.ToString("dd/MM/yyyy HH:mm")
 function Write-Log {
     param ([string]$Text)
     try {
-        # Add-Content -Path $LogFile -Value "[$(Get-Date -Format "dd/MM/yyyy HH:mm")] - $Text" -ErrorAction Stop
+        # Pulling the current date for each addition to the log is unnecessary compute
         Add-Content -Path $LogFile -Value "[$formattedDate] - $Text" -ErrorAction Stop
     } catch {
         Write-Warning "An error occurred writing to log file: $_"
     }
 }
 
-
-$IndividualDeletionRules = Get-ChildItem -Path "C:\Scripts\RM01\Rules\RM01*.psd1" | Import-PowerShellDataFile -ErrorAction Stop
+# Combines all PS data files into one variable
+# psd1 files will only live in the path specified below
+$IndividualDeletionRules = Get-ChildItem -Path "C:\Scripts\RM01\Rules\RM01-Cus*.psd1" | Import-PowerShellDataFile -ErrorAction Stop
 $DeletionRules = @{}
 try {
     $IndividualDeletionRules | ForEach-Object {
@@ -29,12 +32,14 @@ try {
     throw
 }
 
-
-
+# Each rule gets passed through the pipeline instead of assigned to a single variable
+# This allows deletions to occur in a stream as opposed to in big chunks
+# For large groups of files, potential thousands of objects will not be stored in memory
 $DeletionRules.GetEnumerator() | ForEach-Object -Process {
     $rule = $_
     $wildcardPath = $rule.Key
     
+    # Allows for multiple wildcards within file paths
     $resolvedPaths = try { Resolve-Path -Path $wildcardPath -ErrorAction SilentlyContinue } catch {}
     
     if ($null -eq $resolvedPaths) {
@@ -42,6 +47,7 @@ $DeletionRules.GetEnumerator() | ForEach-Object -Process {
         return
     }
 
+    # Using custom objects with only necessary properties instead of PathInfo objects
     foreach ($pathInfo in $resolvedPaths) {
         [PSCustomObject]@{
             Path = $pathInfo.Path
@@ -70,6 +76,7 @@ $DeletionRules.GetEnumerator() | ForEach-Object -Process {
         $params['Recurse'] = $true 
     }
 
+    # Checks all files and filters based on filename/extension or last modified
     $retentionThreshold = $currentDate.AddDays(-$ruleSubPath.RetentionDays)
     Get-ChildItem @params | Where-Object { 
         $filtered = $_
@@ -87,7 +94,7 @@ $DeletionRules.GetEnumerator() | ForEach-Object -Process {
     $file = $_
     try {
         Write-Log "Deleting file: $($file.FullName) - Last modified $($file.LastWriteTime)"
-        #Remove-Item -Path $file.FullName -Force -WhatIf -ErrorAction Stop
+        Remove-Item -Path $file.FullName -Force -WhatIf -ErrorAction Stop
         
         $totalSpaceCleared += $file.Length
         $totalFilesDeleted++
@@ -101,6 +108,7 @@ Write-Log "Total files processed for deletion: $totalFilesDeleted"
 Write-Log "Total space cleared: $spaceClearedInGB GB"
 
 try {
+    # ClearedDiskSpace field defaults to 0 if not set before
     $currentCleared = [float](Ninja-Property-Get -Name cleareddiskspace)
     $newValue = [math]::Round($currentCleared + $spaceClearedInGB, 2)
     Ninja-Property-Set -Name cleareddiskspace -Value $newValue
